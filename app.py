@@ -26,9 +26,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS rsvp (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            contact TEXT NOT NULL,
+            phone TEXT NOT NULL,
             guests INTEGER NOT NULL DEFAULT 1,
-            dietary TEXT,
+            note TEXT,
             attending INTEGER NOT NULL,
             created_at TEXT NOT NULL
         )
@@ -102,19 +102,15 @@ FORM_TEMPLATE = BASE_STYLE + """
       <label>Full name</label>
       <input type="text" name="name" required>
 
-      <label>Phone or WeChat ID</label>
-      <input type="text" name="contact" required>
+      <label>Phone number</label>
+      <input type="text" name="phone" required>
 
       <label>Number attending (including you)</label>
       <input type="text" name="guests" value="1">
 
-      <label>Dietary preference</label>
-      <select name="dietary">
-        <option>No restriction</option>
-        <option>Vegetarian</option>
-        <option>No pork</option>
-        <option>Other</option>
-      </select>
+      <label>Note or message (optional)</label>
+      <input type="text" name="note" placeholder="Anything you'd like us to know">
+      
 
       <label>Will you be attending?</label>
       <div class="toggle">
@@ -172,11 +168,11 @@ ADMIN_PANEL_TEMPLATE = BASE_STYLE + """
       <div class="stat"><b>{{ summary.declined }}</b>Declined</div>
     </div>
     <table>
-      <tr><th>Name</th><th>Contact</th><th>Guests</th><th>Dietary</th><th>Status</th></tr>
+      <tr><th>Name</th><th>Phone</th><th>Guests</th><th>Note</th><th>Status</th></tr>
       {% for r in rows %}
       <tr>
-        <td>{{ r.name }}</td><td>{{ r.contact }}</td><td>{{ r.guests }}</td>
-        <td>{{ r.dietary }}</td><td>{{ "Confirmed" if r.attending else "Declined" }}</td>
+        <td>{{ r.name }}</td><td>{{ r.phone }}</td><td>{{ r.guests }}</td>
+        <td>{{ r.note or "" }}</td><td>{{ "Confirmed" if r.attending else "Declined" }}</td>
       </tr>
       {% endfor %}
     </table>
@@ -191,25 +187,25 @@ ADMIN_PANEL_TEMPLATE = BASE_STYLE + """
 def rsvp():
     if request.method == "POST":
         name = request.form.get("name", "").strip()
-        contact = request.form.get("contact", "").strip()
+        phone = request.form.get("phone", "").strip()
         attending_raw = request.form.get("attending")
-        dietary = request.form.get("dietary", "No restriction")
+        note = request.form.get("note", "").strip()
         try:
             guests = max(1, int(request.form.get("guests", "1")))
         except ValueError:
             guests = 1
 
-        if not name or not contact or attending_raw not in ("yes", "no"):
+        if not name or not phone or attending_raw not in ("yes", "no"):
             return render_template_string(
-                FORM_TEMPLATE, error="Please fill in your name and contact, and pick an option.",
+                FORM_TEMPLATE, error="Please fill in your name and phone number, and pick an option.",
                 counts=get_counts()
             )
 
         attending = 1 if attending_raw == "yes" else 0
         conn = get_conn()
         conn.execute(
-            "INSERT INTO rsvp (name, contact, guests, dietary, attending, created_at) VALUES (?,?,?,?,?,?)",
-            (name, contact, guests, dietary, attending, datetime.utcnow().isoformat())
+            "INSERT INTO rsvp (name, phone, guests, note, attending, created_at) VALUES (?,?,?,?,?,?)",
+            (name, phone, guests, note, attending, datetime.utcnow().isoformat())
         )
         conn.commit()
         conn.close()
@@ -271,8 +267,8 @@ def export_pdf():
 
     y = height - 95
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(50, y, "Name"); c.drawString(200, y, "Contact")
-    c.drawString(340, y, "Guests"); c.drawString(390, y, "Dietary"); c.drawString(480, y, "Status")
+    c.drawString(50, y, "Name"); c.drawString(200, y, "Phone")
+    c.drawString(340, y, "Guests"); c.drawString(390, y, "Note"); c.drawString(480, y, "Status")
     y -= 6
     c.line(50, y, 560, y)
     y -= 16
@@ -284,9 +280,9 @@ def export_pdf():
             y = height - 50
             c.setFont("Helvetica", 9)
         c.drawString(50, y, str(r["name"])[:28])
-        c.drawString(200, y, str(r["contact"])[:22])
+        c.drawString(200, y, str(r["phone"])[:22])
         c.drawString(340, y, str(r["guests"]))
-        c.drawString(390, y, str(r["dietary"])[:15])
+        c.drawString(390, y, str(r["note"] or "")[:15])
         c.drawString(480, y, "Confirmed" if r["attending"] else "Declined")
         y -= 16
 
