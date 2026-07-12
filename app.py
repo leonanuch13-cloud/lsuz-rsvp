@@ -41,6 +41,10 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     return conn
 
+# Create the table immediately on import — this runs whether the app is
+# started with "python app.py" (local) or "gunicorn app:app" (Render).
+init_db()
+
 def get_counts():
     conn = get_conn()
     total = conn.execute("SELECT COUNT(*) c FROM rsvp").fetchone()["c"]
@@ -292,5 +296,4 @@ def export_pdf():
 
 
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True, host="0.0.0.0", port=5000)
