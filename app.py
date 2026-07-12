@@ -55,9 +55,16 @@ def get_counts():
 # ---------- Styling shared across pages ----------
 BASE_STYLE = """
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&display=swap');
   body{margin:0;background:#FBF7EF;color:#1B1B1F;font-family:'Segoe UI',sans-serif;}
-  .hero{background:#002868;color:#fff;padding:40px 24px;text-align:center;}
-  .hero h1{font-size:32px;margin:0 0 8px;}
+  .hero{background:#002868;color:#fff;padding:48px 24px 40px;text-align:center;}
+  .hero .star{margin-bottom:18px;}
+  .hero .org{text-transform:uppercase;letter-spacing:3px;font-size:12.5px;font-weight:600;
+    color:rgba(255,255,255,0.75);margin:0 0 14px;}
+  .hero h1{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:42px;
+    line-height:1.15;margin:0 0 16px;}
+  .hero .tagline{color:rgba(255,255,255,0.85);font-size:15px;line-height:1.55;
+    max-width:340px;margin:0 auto;}
   .hero p{color:rgba(255,255,255,0.8);font-size:14px;margin:0;}
   .stripes{display:flex;height:8px;}
   .stripes span{flex:1;}
@@ -65,6 +72,8 @@ BASE_STYLE = """
   .stripes span:nth-child(even){background:#fff;}
   main{max-width:480px;margin:30px auto;padding:0 20px;}
   .card{background:#fff;border:1px solid #eee;border-radius:12px;padding:26px;}
+  .card h2{font-family:'Playfair Display',Georgia,serif;font-size:24px;margin:0 0 8px;}
+  .card .intro{color:#666;font-size:14px;line-height:1.55;margin:0 0 6px;}
   label{display:block;font-weight:600;font-size:13px;margin:14px 0 6px;}
   input[type=text],select{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;
     font-size:15px;box-sizing:border-box;background:#FBF7EF;}
@@ -90,20 +99,25 @@ BASE_STYLE = """
 
 FORM_TEMPLATE = BASE_STYLE + """
 <div class="hero">
-  <h1>July 26 Roll Call</h1>
-  <p>Liberian Students Union — Zhuzhou</p>
+  <svg class="star" width="40" height="40" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2l2.9 6.6L22 9.3l-5 4.9 1.2 7-6.2-3.4-6.2 3.4 1.2-7-5-4.9 7.1-0.7z"/>
+  </svg>
+  <p class="org">Liberian Students Union &mdash; Zhuzhou</p>
+  <h1>July 26<br>Roll Call</h1>
+  <p class="tagline">Confirm your seat at the table. One name, one stripe, one celebration.</p>
 </div>
 <div class="stripes"><span></span><span></span><span></span><span></span><span></span><span></span></div>
 <div class="count">{{ counts.confirmed }} confirmed of {{ counts.total }} responses</div>
 <main>
   <div class="card">
     <h2>Confirm your spot</h2>
+    <p class="intro">Fill this in once — your name joins the roll call above and the committee's list.</p>
     <form method="POST">
       <label>Full name</label>
-      <input type="text" name="name" required>
+      <input type="text" name="name" placeholder="e.g. Promise Cooper" required>
 
       <label>Phone number</label>
-      <input type="text" name="phone" required>
+      <input type="text" name="phone" placeholder="e.g. 138 0000 0000" required>
 
       <label>Number attending (including you)</label>
       <input type="text" name="guests" value="1">
