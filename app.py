@@ -1,9 +1,16 @@
 """
 LSUZ July 26 Celebration — RSVP App
-Run:  pip install flask reportlab
+Run:  pip install -r requirements.txt
       python app.py
 Visit http://localhost:5000
 Admin roster: http://localhost:5000/admin  (passcode below)
+
+DATA STORAGE:
+If a DATABASE_URL environment variable is set (Render Postgres), that is used
+so signups survive restarts/redeploys. Otherwise it falls back to a local
+rsvp.db SQLite file for quick local testing — note that on Render's free
+tier, local disk is wiped on every restart, so DATABASE_URL is required
+for production use there.
 """
 
 from flask import Flask, request, redirect, url_for, session, render_template_string, send_file
@@ -16,30 +23,84 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "rsvp.db")
 ADMIN_PASSCODE = "LSUZ2026"   # <-- change this
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
+IS_PG = bool(DATABASE_URL)
+
+if IS_PG:
+    import psycopg2
+    import psycopg2.extras
+
 app = Flask(__name__)
 app.secret_key = "lsuz-july26-change-this-secret-key"
 
 # ---------- Database ----------
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS rsvp (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            guests INTEGER NOT NULL DEFAULT 1,
-            note TEXT,
-            attending INTEGER NOT NULL,
-            created_at TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
+def q(sql):
+    """Translate sqlite-style '?' placeholders to psycopg2-style '%s' when on Postgres."""
+    return sql.replace("?", "%s") if IS_PG else sql
 
 def get_conn():
+    if IS_PG:
+        return psycopg2.connect(DATABASE_URL, sslmode="require")
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+def db_execute(conn, sql, params=()):
+    """Run an INSERT/UPDATE/DDL statement and commit."""
+    if IS_PG:
+        cur = conn.cursor()
+        cur.execute(q(sql), params)
+        conn.commit()
+        cur.close()
+    else:
+        conn.execute(sql, params)
+        conn.commit()
+
+def db_fetchall(conn, sql, params=()):
+    if IS_PG:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(q(sql), params)
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    return conn.execute(sql, params).fetchall()
+
+def db_fetchone(conn, sql, params=()):
+    if IS_PG:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(q(sql), params)
+        row = cur.fetchone()
+        cur.close()
+        return row
+    return conn.execute(sql, params).fetchone()
+
+def init_db():
+    conn = get_conn()
+    if IS_PG:
+        db_execute(conn, """
+            CREATE TABLE IF NOT EXISTS rsvp (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                guests INTEGER NOT NULL DEFAULT 1,
+                note TEXT,
+                attending INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+    else:
+        db_execute(conn, """
+            CREATE TABLE IF NOT EXISTS rsvp (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                guests INTEGER NOT NULL DEFAULT 1,
+                note TEXT,
+                attending INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+    conn.close()
 
 # Create the table immediately on import — this runs whether the app is
 # started with "python app.py" (local) or "gunicorn app:app" (Render).
@@ -47,8 +108,8 @@ init_db()
 
 def get_counts():
     conn = get_conn()
-    total = conn.execute("SELECT COUNT(*) c FROM rsvp").fetchone()["c"]
-    confirmed = conn.execute("SELECT COUNT(*) c FROM rsvp WHERE attending=1").fetchone()["c"]
+    total = db_fetchone(conn, "SELECT COUNT(*) c FROM rsvp")["c"]
+    confirmed = db_fetchone(conn, "SELECT COUNT(*) c FROM rsvp WHERE attending=1")["c"]
     conn.close()
     return {"total": total, "confirmed": confirmed}
 
@@ -217,11 +278,11 @@ def rsvp():
 
         attending = 1 if attending_raw == "yes" else 0
         conn = get_conn()
-        conn.execute(
+        db_execute(
+            conn,
             "INSERT INTO rsvp (name, phone, guests, note, attending, created_at) VALUES (?,?,?,?,?,?)",
             (name, phone, guests, note, attending, datetime.utcnow().isoformat())
         )
-        conn.commit()
         conn.close()
 
         return render_template_string(CONFIRM_TEMPLATE, name=name.split(" ")[0], attending=attending)
@@ -244,7 +305,7 @@ def admin_panel():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM rsvp ORDER BY created_at DESC").fetchall()
+    rows = db_fetchall(conn, "SELECT * FROM rsvp ORDER BY created_at DESC")
     conn.close()
     confirmed = sum(1 for r in rows if r["attending"])
     declined = len(rows) - confirmed
@@ -264,7 +325,7 @@ def export_pdf():
     if not session.get("admin"):
         return redirect(url_for("admin_login"))
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM rsvp ORDER BY created_at DESC").fetchall()
+    rows = db_fetchall(conn, "SELECT * FROM rsvp ORDER BY created_at DESC")
     conn.close()
 
     buf = io.BytesIO()
